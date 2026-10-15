@@ -1,30 +1,85 @@
 #include <Arduino.h>
+#include "BlinkMode.h"
 
-#define BUTTON_IN 16  // Кнопка підключена до GPIO 16
+const int RED_LED = 15;
+const int BLUE_LED = 16;
 
-volatile uint32_t button_counter = 0;  // volatile обов'язковий для змінних, які змінюються всередині ISR
+const int EXTERNAL_BUTTON = 21;
+const int BOOT_BUTTON = 0;
 
-uint32_t last_count = 0; // Змінна для відслідковування змін у головному циклі
+BlinkMode currentMode = BlinkMode::SYNC;
 
-// Швидка функція обробки переривань (ISR), яка розміщується в оперативній пам'яті (IRAM)
-void IRAM_ATTR button_isr() {
-  button_counter++;
-}
+int lastExternalButtonState = HIGH;
+int lastBootButtonState = HIGH;
+
+const unsigned long DEBOUNCE_DELAY = 50;
+
+void checkButtons();
+void blinkSynchronously();
+void blinkAlternately();
 
 void setup() {
-  pinMode(BUTTON_IN, INPUT_PULLUP);
-  Serial.begin(115200);
+    Serial.begin(115200);
 
-  // Прив'язка переривання. FALLING означає спрацьовування при натисканні (перехід з 1 в 0)
-  attachInterrupt(digitalPinToInterrupt(BUTTON_IN), button_isr, FALLING);
+    pinMode(RED_LED, OUTPUT);
+    pinMode(BLUE_LED, OUTPUT);
+
+    pinMode(EXTERNAL_BUTTON, INPUT_PULLUP);
+    pinMode(BOOT_BUTTON, INPUT);
+
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(BLUE_LED, LOW);
+
+    Serial.println("Program started");
+    Serial.println("Mode 1: Synchronous blinking");
 }
 
 void loop() {
-  if (button_counter != last_count) {
-    last_count = button_counter;
-    Serial.print("Button Pressed! Count: ");
-    Serial.println(last_count);
-  }
+    checkButtons();
 
-  delay(10);
+    if (currentMode == BlinkMode::SYNC) {
+        blinkSynchronously();
+    } else {
+        blinkAlternately();
+    }
+}
+
+void checkButtons() {
+    int externalState = digitalRead(EXTERNAL_BUTTON);
+    int bootState = digitalRead(BOOT_BUTTON);
+
+    if (externalState == LOW && lastExternalButtonState == HIGH) {
+        currentMode = BlinkMode::SYNC;
+        Serial.println("Mode 1: Synchronous blinking");
+    }
+
+    if (bootState == LOW && lastBootButtonState == HIGH) {
+        currentMode = BlinkMode::ALTERNATING;
+        Serial.println("Mode 2: Alternating blinking");
+    }
+
+    lastExternalButtonState = externalState;
+    lastBootButtonState = bootState;
+
+    delay(DEBOUNCE_DELAY);
+}
+
+void blinkSynchronously() {
+    digitalWrite(RED_LED, HIGH);
+    digitalWrite(BLUE_LED, HIGH);
+    delay(200);
+
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(BLUE_LED, LOW);
+    delay(200);
+}
+
+void blinkAlternately() {
+    digitalWrite(RED_LED, HIGH);
+    digitalWrite(BLUE_LED, LOW);
+    delay(1000);
+
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(BLUE_LED, HIGH);
+    delay(1000);
 }
