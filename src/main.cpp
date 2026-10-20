@@ -1,30 +1,28 @@
 #include <Arduino.h>
-
-#define BUTTON_IN 16  // Кнопка підключена до GPIO 16
-
-volatile uint32_t button_counter = 0;  // volatile обов'язковий для змінних, які змінюються всередині ISR
-
-uint32_t last_count = 0; // Змінна для відслідковування змін у головному циклі
-
-// Швидка функція обробки переривань (ISR), яка розміщується в оперативній пам'яті (IRAM)
-void IRAM_ATTR button_isr() {
-  button_counter++;
-}
+#include "config.h"
+#include "sensor.h"
+#include "smart_light.h"
 
 void setup() {
-  pinMode(BUTTON_IN, INPUT_PULLUP);
-  Serial.begin(115200);
-
-  // Прив'язка переривання. FALLING означає спрацьовування при натисканні (перехід з 1 в 0)
-  attachInterrupt(digitalPinToInterrupt(BUTTON_IN), button_isr, FALLING);
+    Serial.begin(Config::kBaud);
+    Serial.printf("Program start!");
+    SmartLight::begin();
+    Sensor::begin();
 }
 
 void loop() {
-  if (button_counter != last_count) {
-    last_count = button_counter;
-    Serial.print("Button Pressed! Count: ");
-    Serial.println(last_count);
-  }
+    static uint32_t lastSampleMs = 0;
+    const uint32_t nowMs = millis();
+    if (nowMs - lastSampleMs < Config::kSamplePeriodMs) return;
+    lastSampleMs = nowMs;
 
-  delay(10);
+    const SensorReading reading = Sensor::sample();
+    SmartLight::update(reading.average);
+
+    // Serial Plotter: separate curves with meaningful labels.
+    Serial.printf("raw:%u\t  avg:%u\t  mV:%lu\t  led:%u\n",
+                  static_cast<unsigned>(reading.raw),
+                  static_cast<unsigned>(reading.average),
+                  static_cast<unsigned long>(reading.millivolts),
+                  SmartLight::isOn() ? 1U : 0U);
 }
